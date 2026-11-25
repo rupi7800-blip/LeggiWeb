@@ -700,7 +700,7 @@ $('#btnReload').onclick = () => {
   if (st.doc.url) openUrl(st.doc.url, { force: true });
   else toast('Questa pagina non ha un indirizzo da ricaricare');
 };
-$('#btnNewTab').onclick = () => { showBlank(); $('#inUrl').focus(); };
+$('#btnNewTab').onclick = () => { showBlank(); $('#srcSeg [data-src=url]').click(); $('#inUrl').focus(); };
 document.addEventListener('keydown', e => {
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); history.back(); }
   if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); history.forward(); }
