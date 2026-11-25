@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>LeggiWeb</title>
-  <meta name="description" content="Apre una pagina web e la legge ad alta voce in italiano o spagnolo.">
+  <meta name="description" content="Apre una pagina web e la legge ad alta voce in italiano, spagnolo o inglese, con traduttore integrato.">
   <meta name="theme-color" content="#1b2a41">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-32.png">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="css/style.css">
-  <script src="js/aggiornamenti.js" data-version="1.0.0"></script>
+  <script src="js/aggiornamenti.js" data-version="1.1.0"></script>
 </head>
 <body>
   <header class="top">
@@ -31,6 +31,16 @@
     <button class="tab" data-view="libreria" role="tab">Libreria <span id="libCount" class="count"></span></button>
   </nav>
 
+  <div class="browser" id="browser">
+    <div class="b-nav">
+      <button class="icon-btn" id="btnBack" aria-label="Indietro" title="Indietro" disabled><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button class="icon-btn" id="btnFwd" aria-label="Avanti" title="Avanti" disabled><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+      <button class="icon-btn" id="btnReload" aria-label="Ricarica la pagina" title="Ricarica"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+      <button class="icon-btn" id="btnNewTab" aria-label="Nuova scheda" title="Nuova scheda"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+    <div class="b-tabs" id="bTabs" role="tablist"></div>
+  </div>
+
   <main>
     <!-- ============ LEGGI ============ -->
     <section id="view-leggi" class="view active">
@@ -49,7 +59,7 @@
         </form>
 
         <form id="formText" class="src-pane hidden">
-          <textarea id="inText" rows="6" placeholder="Incolla qui un testo in italiano o in spagnolo…"></textarea>
+          <textarea id="inText" rows="6" placeholder="Incolla qui un testo in italiano, spagnolo o inglese…"></textarea>
           <button class="primary" type="submit">Prepara la lettura</button>
         </form>
 
@@ -70,6 +80,15 @@
             <div class="seg small" id="langSeg">
               <button data-lang="it">🇮🇹 Italiano</button>
               <button data-lang="es">🇪🇸 Español</button>
+              <button data-lang="en">🇬🇧 English</button>
+            </div>
+          </div>
+          <div class="lang-row">
+            <span>Traduci in</span>
+            <div class="seg small" id="trSeg">
+              <button data-to="it">🇮🇹 Italiano</button>
+              <button data-to="es">🇪🇸 Español</button>
+              <button data-to="en">🇬🇧 English</button>
             </div>
           </div>
           <p class="tap-hint">Tocca una frase per iniziare a leggere da lì.</p>
@@ -79,7 +98,7 @@
 
       <div id="empty" class="empty">
         <svg viewBox="0 0 24 24"><path d="M4 5h11v14H4z"/><path d="M7 9h5M7 12h5M7 15h3"/><path d="M18 9a4 4 0 0 1 0 6M20.5 7a7 7 0 0 1 0 10"/></svg>
-        <p>Apri una pagina web o incolla un testo:<br>LeggiWeb lo leggerà ad alta voce in <b>italiano</b> o in <b>spagnolo</b>.</p>
+        <p>Apri una pagina web o incolla un testo:<br>LeggiWeb lo leggerà ad alta voce in <b>italiano</b>, <b>spagnolo</b> o <b>inglese</b>, e può tradurlo tra queste lingue.</p>
       </div>
     </section>
 
@@ -123,6 +142,9 @@
         </label>
         <label>Voce spagnola
           <div class="row"><select id="selVoiceEs"></select><button type="button" class="ghost small" data-test="es">Prova</button></div>
+        </label>
+        <label>Voce inglese
+          <div class="row"><select id="selVoiceEn"></select><button type="button" class="ghost small" data-test="en">Prova</button></div>
         </label>
         <p id="voiceWarn" class="warn hidden"></p>
       </fieldset>

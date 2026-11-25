@@ -1,5 +1,5 @@
 /* =========================================================
-   LeggiWeb — legge ad alta voce pagine web in italiano e spagnolo
+   LeggiWeb — legge ad alta voce pagine web in italiano, spagnolo e inglese
    Estrazione testo: r.jina.ai (principale) → proxy CORS + estrazione
    locale (riserva). Voce: Web Speech API del dispositivo.
    ========================================================= */
@@ -13,7 +13,16 @@ const synth = window.speechSynthesis;
 function load(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : Object.assign(Array.isArray(d) ? [] : {}, d, v); } catch (e) { return d; } }
 function save(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
 
-const DEF = { rate: 1, pitch: 1, voiceIt: '', voiceEs: '', font: 19, theme: 'auto', autoLang: true, follow: true, bg: true, sleep: 0 };
+/* lingue di lettura: aggiungerne una = una riga qui + stopword in SW + selettori in index.html */
+const LANGS = {
+  it: { name: 'Italiano', flag: '🇮🇹', bcp: 'it-IT', pref: ['it-it'], voiceKey: 'voiceIt', adj: 'italiana', read: 'Lettura in italiano', done: 'Lettura terminata', test: 'Ciao, sono la voce che leggerà le tue pagine in italiano.' },
+  es: { name: 'Español', flag: '🇪🇸', bcp: 'es-ES', pref: ['es-es'], voiceKey: 'voiceEs', adj: 'spagnola', read: 'Lectura en español', done: 'Lectura terminada', test: 'Hola, soy la voz que leerá tus páginas en español.' },
+  en: { name: 'English', flag: '🇬🇧', bcp: 'en-GB', pref: ['en-gb', 'en-us'], voiceKey: 'voiceEn', adj: 'inglese', read: 'Reading in English', done: 'Reading finished', test: 'Hello, I am the voice that will read your pages in English.' }
+};
+const LANG_KEYS = Object.keys(LANGS);
+const L = l => LANGS[l] || LANGS.it;
+
+const DEF = { rate: 1, pitch: 1, voiceIt: '', voiceEs: '', voiceEn: '', font: 19, theme: 'auto', autoLang: true, follow: true, bg: true, sleep: 0 };
 const settings = load('lw.settings', DEF);
 let library = (() => { try { return JSON.parse(localStorage.getItem('lw.library')) || []; } catch (e) { return []; } })();
 
@@ -56,18 +65,22 @@ function normUrl(s) {
 /* ---------------- riconoscimento lingua ---------------- */
 const SW = {
   it: ['il', 'lo', 'gli', 'della', 'delle', 'degli', 'dello', 'che', 'non', 'per', 'sono', 'è', 'nel', 'nella', 'con', 'una', 'di', 'del', 'anche', 'questo', 'questa', 'più', 'come', 'ma', 'alla', 'alle', 'dei', 'ha', 'hanno', 'essere', 'stato', 'ci', 'si', 'già', 'perché', 'quando', 'molto', 'tra', 'fra', 'sul', 'sulla', 'ed', 'poi', 'ancora', 'cosa', 'tutti', 'dopo'],
-  es: ['el', 'los', 'las', 'del', 'que', 'y', 'es', 'por', 'una', 'con', 'para', 'como', 'más', 'pero', 'sus', 'está', 'también', 'muy', 'al', 'se', 'lo', 'su', 'fue', 'han', 'hay', 'este', 'esta', 'entre', 'cuando', 'desde', 'sobre', 'todo', 'ya', 'porque', 'ser', 'son', 'sin', 'hasta', 'donde', 'después', 'año', 'nos', 'pueden', 'cómo', 'qué']
+  es: ['el', 'los', 'las', 'del', 'que', 'y', 'es', 'por', 'una', 'con', 'para', 'como', 'más', 'pero', 'sus', 'está', 'también', 'muy', 'al', 'se', 'lo', 'su', 'fue', 'han', 'hay', 'este', 'esta', 'entre', 'cuando', 'desde', 'sobre', 'todo', 'ya', 'porque', 'ser', 'son', 'sin', 'hasta', 'donde', 'después', 'año', 'nos', 'pueden', 'cómo', 'qué'],
+  en: ['the', 'and', 'of', 'to', 'is', 'that', 'with', 'for', 'this', 'are', 'was', 'have', 'from', 'not', 'but', 'they', 'which', 'their', 'would', 'been', 'will', 'can', 'you', 'has', 'more', 'about', 'there', 'were', 'also', 'its', 'after', 'than', 'when', 'what', 'into', 'his', 'her', 'who', 'said', 'one', 'all', 'our']
 };
 function detectLang(text, hint) {
   const sample = text.slice(0, 6000).toLowerCase();
   const words = sample.match(/[a-záéíóúàèìòùñü]+/g) || [];
-  const sets = { it: new Set(SW.it), es: new Set(SW.es) };
-  let it = 0, es = 0;
-  for (const w of words) { if (sets.it.has(w)) it++; if (sets.es.has(w)) es++; }
-  es += ((sample.match(/[ñ¿¡]/g) || []).length) * 3 + ((sample.match(/ción\b|ciones\b/g) || []).length) * 2;
-  it += ((sample.match(/[àèìòù]/g) || []).length) + ((sample.match(/zione\b|zioni\b|gli\b/g) || []).length) * 2;
-  if (it + es < 6 && hint) { const h = hint.toLowerCase(); if (h.startsWith('es')) return 'es'; if (h.startsWith('it')) return 'it'; }
-  return es > it ? 'es' : 'it';
+  const sets = {}; LANG_KEYS.forEach(k => { sets[k] = new Set(SW[k]); });
+  const sc = { it: 0, es: 0, en: 0 };
+  for (const w of words) for (const k of LANG_KEYS) if (sets[k].has(w)) sc[k]++;
+  sc.es += ((sample.match(/[ñ¿¡]/g) || []).length) * 3 + ((sample.match(/ción\b|ciones\b/g) || []).length) * 2;
+  sc.it += ((sample.match(/[àèìòù]/g) || []).length) + ((sample.match(/zione\b|zioni\b|gli\b/g) || []).length) * 2;
+  sc.en += ((sample.match(/tion\b|tions\b|ing\b/g) || []).length);
+  if (sc.it + sc.es + sc.en < 6 && hint) { const h = hint.toLowerCase(); for (const k of LANG_KEYS) if (h.startsWith(k)) return k; }
+  let best = 'it';
+  for (const k of LANG_KEYS) if (sc[k] > sc[best]) best = k;
+  return best;
 }
 
 /* ---------------- estrazione del testo ---------------- */
@@ -117,7 +130,7 @@ function cleanMd(md) {
 
 // toglie menu, briciole, "condividi", ecc. (blocchi corti in sequenza)
 function dropJunk(blocks) {
-  const junk = /^(menu|cerca|search|condividi|share|compartir|iscriviti|suscríbete|accedi|login|cookie|privacy|leggi anche|lee también|pubblicità|publicidad|advertisement|torna su|skip to)/i;
+  const junk = /^(menu|cerca|search|condividi|share|compartir|iscriviti|suscríbete|subscribe|sign in|read more|related|accedi|login|cookie|privacy|leggi anche|lee también|pubblicità|publicidad|advertisement|torna su|skip to)/i;
   const res = blocks.filter(b => {
     const w = b.text.split(/\s+/).length;
     if (junk.test(b.text) && w < 12) return false;
@@ -198,11 +211,11 @@ async function viaProxy(url) {
   throw lastErr || new Error('proxy');
 }
 
-async function openUrl(url) {
+async function openUrl(url, opt = {}) {
   url = normUrl(url);
   if (!url) { toast('Indirizzo non valido'); return; }
   const known = library.find(d => d.url === url);
-  if (known) { openDoc(known); toast('Ripreso dalla libreria'); return; }
+  if (known && !opt.force) { openDoc(known); toast('Ripreso dalla libreria'); return; }
   stop();
   $('#btnOpen').disabled = true;
   status('Apro la pagina e preparo il testo…', 'load');
@@ -212,15 +225,16 @@ async function openUrl(url) {
     catch (e) { status('Provo un altro metodo di lettura…', 'load'); res = await viaProxy(url); }
     const all = res.blocks.map(b => b.text).join(' ');
     const doc = {
-      id: 'd' + Date.now().toString(36),
+      id: known ? known.id : 'd' + Date.now().toString(36),
       url, site: hostOf(url),
       title: res.title || hostOf(url),
-      lang: chooseLang(res.title + ' ' + all, res.lang),
+      lang: known ? known.lang : chooseLang(res.title + ' ' + all, res.lang),
       blocks: res.blocks, date: Date.now(), pos: 0
     };
     status('');
     addToLibrary(doc);
-    openDoc(doc);
+    openDoc(doc, { noPush: !!known });
+    if (opt.force) toast('Pagina ricaricata');
   } catch (e) {
     console.warn(e);
     status('Non riesco a leggere questa pagina (potrebbe essere protetta o richiedere l\'accesso).<br>Puoi aprirla nel browser, copiare il testo e usare <b>Incolla testo</b>.', 'err');
@@ -268,9 +282,12 @@ function splitSentences(text, lang) {
 }
 
 /* ---------------- visualizzazione ---------------- */
-function openDoc(doc) {
+function openDoc(doc, opt = {}) {
   stop();
-  st.doc = doc;
+  st.doc = doc; blank = false;
+  if (!tabIds.includes(doc.id)) tabIds.push(doc.id);
+  if (!opt.noPush) pushNav(doc.id);
+  $('#inUrl').value = doc.url || '';
   $('#empty').classList.add('hidden');
   $('#reader').classList.remove('hidden');
   $('#player').classList.remove('hidden');
@@ -278,6 +295,7 @@ function openDoc(doc) {
   $('#docSite').textContent = doc.site || '';
   renderDoc();
   setLangButtons();
+  renderTabs();
   switchView('leggi');
   const pos = Math.min(doc.pos || 0, st.sents.length - 1);
   st.idx = Math.max(0, pos);
@@ -321,6 +339,7 @@ $('#docBody').addEventListener('click', e => {
 
 function setLangButtons() {
   $$('#langSeg button').forEach(b => b.classList.toggle('on', b.dataset.lang === st.doc.lang));
+  $$('#trSeg button').forEach(b => { b.disabled = b.dataset.to === st.doc.lang; });
 }
 $('#langSeg').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || !st.doc) return;
@@ -328,7 +347,7 @@ $('#langSeg').addEventListener('click', e => {
   const wasPlaying = st.playing;
   st.doc.lang = b.dataset.lang;
   setLangButtons(); persistDoc();
-  toast(b.dataset.lang === 'es' ? 'Lectura en español' : 'Lettura in italiano');
+  toast(L(b.dataset.lang).read);
   if (wasPlaying) play(st.idx);
 });
 
@@ -361,11 +380,12 @@ function loadVoices() {
   st.voices = synth ? synth.getVoices() : [];
   fillVoiceSelect('#selVoiceIt', 'it', 'voiceIt');
   fillVoiceSelect('#selVoiceEs', 'es', 'voiceEs');
-  const miss = ['it', 'es'].filter(l => !st.voices.some(v => langOf(v).startsWith(l)));
+  fillVoiceSelect('#selVoiceEn', 'en', 'voiceEn');
+  const miss = LANG_KEYS.filter(l => !st.voices.some(v => langOf(v).startsWith(l)));
   const w = $('#voiceWarn');
   if (!synth) { w.textContent = 'Questo browser non supporta la lettura vocale. Usa Chrome, Edge o Safari aggiornati.'; w.classList.remove('hidden'); }
   else if (st.voices.length && miss.length) {
-    w.innerHTML = 'Non trovo una voce ' + miss.map(l => l === 'it' ? '<b>italiana</b>' : '<b>spagnola</b>').join(' e ') +
+    w.innerHTML = 'Non trovo una voce ' + miss.map(l => '<b>' + L(l).adj + '</b>').join(', ') +
       ' sul dispositivo. Su Android: <i>Impostazioni → Sistema → Lingue → Output sintesi vocale → Motore Google → Installa dati vocali</i>. Su iPhone: <i>Impostazioni → Accessibilità → Contenuto letto → Voci</i>.';
     w.classList.remove('hidden');
   } else w.classList.add('hidden');
@@ -381,14 +401,14 @@ function fillVoiceSelect(sel, lang, key) {
 function score(v, lang) {
   const l = langOf(v); const n = v.name.toLowerCase();
   let s = 0;
-  if (l === (lang === 'it' ? 'it-it' : 'es-es')) s += 4;
+  if (L(lang).pref.includes(l)) s += 4;
   if (/natural|neural|premium|enhanced|google/.test(n)) s += 3;
   if (/online/.test(n)) s += 1;
   if (v.localService) s += 1;
   return s;
 }
 function pickVoice(lang) {
-  const key = lang === 'es' ? 'voiceEs' : 'voiceIt';
+  const key = L(lang).voiceKey;
   const list = st.voices.filter(v => langOf(v).startsWith(lang));
   return list.find(v => v.voiceURI === settings[key]) || list.sort((a, b) => score(b, lang) - score(a, lang))[0] || null;
 }
@@ -410,7 +430,7 @@ function speakAt(i) {
 
   const lang = st.doc.lang;
   const u = new SpeechSynthesisUtterance(st.sents[i].text);
-  u.lang = lang === 'es' ? 'es-ES' : 'it-IT';
+  u.lang = L(lang).bcp;
   const v = pickVoice(lang); if (v) { try { u.voice = v; u.lang = v.lang; } catch (e) { /* voce non valida */ } }
   u.rate = settings.rate; u.pitch = settings.pitch;
   let done = false;
@@ -455,7 +475,7 @@ function finished() {
   st.idx = st.sents.length; persistPos(); markProgress();
   $('#progBar').style.width = '100%';
   const c = $('.s.cur'); if (c) c.classList.remove('cur');
-  toast(st.doc && st.doc.lang === 'es' ? 'Lectura terminada' : 'Lettura terminata');
+  toast(L(st.doc && st.doc.lang).done);
   st.idx = 0;
 }
 function setPlayIcon() {
@@ -489,7 +509,7 @@ $('#btnRate').onclick = () => {
 
 /* tastiera (PC): spazio = play/pausa, frecce = frase prec./succ. */
 document.addEventListener('keydown', e => {
-  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $('#dlgSettings').open || !st.doc) return;
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || $('#dlgSettings').open || !st.doc || e.altKey) return;
   if (e.code === 'Space') { e.preventDefault(); st.playing ? pause() : play(); }
   if (e.code === 'ArrowRight') step(1);
   if (e.code === 'ArrowLeft') step(-1);
@@ -519,7 +539,7 @@ function bgStart() {
     bgAudio.play().catch(() => {});
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: st.doc.title, artist: 'LeggiWeb · ' + (st.doc.lang === 'es' ? 'Español' : 'Italiano'), album: st.doc.site || '',
+        title: st.doc.title, artist: 'LeggiWeb · ' + L(st.doc.lang).name, album: st.doc.site || '',
         artwork: [{ src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }]
       });
       const ms = navigator.mediaSession;
@@ -537,6 +557,155 @@ function bgStop() { try { if (bgAudio) bgAudio.pause(); } catch (e) { /* no */ }
 setInterval(() => { if (st.playing && synth && synth.paused) synth.resume(); }, 5000);
 setInterval(() => { if (st.doc) markProgress(); }, 30000);
 
+/* ---------------- traduttore ---------------- */
+let trBusy = false;
+const unent = (() => { const t = document.createElement('textarea'); return x => { t.innerHTML = x; return t.value; }; })();
+const MT = [
+  async (q, from, to) => { // MyMemory (servizio con API pubblica, limite giornaliero)
+    const r = await fetchT('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(q) + '&langpair=' + from + '|' + to, {}, 15000);
+    if (!r.ok) throw new Error('mymemory ' + r.status);
+    const j = await r.json();
+    const t = j.responseData && j.responseData.translatedText;
+    if (+j.responseStatus !== 200 || !t || /MYMEMORY WARNING|PLEASE SELECT/i.test(t)) throw new Error('mymemory ' + (j.responseDetails || j.responseStatus));
+    return unent(t);
+  },
+  async (q, from, to) => { // riserva (endpoint non ufficiale)
+    const r = await fetchT('https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=' + from + '&tl=' + to + '&q=' + encodeURIComponent(q), {}, 15000);
+    if (!r.ok) throw new Error('gtx ' + r.status);
+    const j = await r.json();
+    const t = (j[0] || []).map(x => x[0]).join('');
+    if (!t) throw new Error('gtx vuoto');
+    return t;
+  }
+];
+async function mtChunk(q, from, to, skip) {
+  let last = new Error('nessun servizio');
+  for (let i = 0; i < MT.length; i++) {
+    if (skip.has(i)) continue;
+    try { return await MT[i](q, from, to); } catch (e) { last = e; skip.add(i); }
+  }
+  throw last;
+}
+function chunkText(text, lang, max = 450) {
+  const out = []; let cur = '';
+  for (const s of splitSentences(text, lang)) {
+    if (cur && (cur + ' ' + s).length > max) { out.push(cur); cur = s; } else cur = cur ? cur + ' ' + s : s;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+async function translateDoc(doc, to) {
+  if (!doc || trBusy) return;
+  if (doc.lang === to) { toast('La pagina è già in ' + L(to).name); return; }
+  const ready = library.find(d => d.srcId === doc.id && d.lang === to);
+  if (ready) { openDoc(ready); toast('Traduzione già pronta'); return; }
+  const from = doc.lang;
+  const queue = [], all = [];
+  const mk = text => { const j = { text, out: '' }; queue.push(j); all.push(j); return j; };
+  const titleJob = mk(doc.title.slice(0, 450));
+  const plan = doc.blocks.map(b => chunkText(b.text, from).map(mk));
+  const total = queue.length;
+  trBusy = true; stop();
+  let done = 0, failed = null;
+  const skip = new Set();
+  const msg = () => status('Traduco in ' + L(to).name + '… ' + Math.round(done / total * 100) + '%', 'load');
+  msg();
+  const worker = async () => {
+    for (let j; !failed && (j = queue.shift());) {
+      try { j.out = await mtChunk(j.text, from, to, skip); } catch (e) { failed = e; return; }
+      done++; msg();
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  trBusy = false;
+  if (failed) {
+    console.warn(failed);
+    status('Traduzione non riuscita: servizio non raggiungibile o limite giornaliero raggiunto. Riprova più tardi.', 'err');
+    return;
+  }
+  status('');
+  const blocks = doc.blocks.map((b, i) => ({ t: b.t, text: plan[i].map(j => j.out).join(' ').replace(/\s+/g, ' ').trim() })).filter(b => b.text);
+  const nd = {
+    id: 'd' + Date.now().toString(36), url: '', srcId: doc.id, srcUrl: doc.url || '',
+    site: (doc.site ? doc.site + ' · ' : '') + L(from).flag + ' → ' + L(to).flag,
+    title: titleJob.out || doc.title, lang: to, blocks, date: Date.now(), pos: 0
+  };
+  addToLibrary(nd);
+  openDoc(nd);
+  toast('Tradotto in ' + L(to).name);
+}
+$('#trSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled || !st.doc) return;
+  translateDoc(st.doc, b.dataset.to);
+});
+
+/* ---------------- gestione pagine "da browser" ----------------
+   schede aperte, avanti/indietro (cronologia del browser, quindi funziona
+   anche col tasto Indietro di Android), ricarica e nuova scheda */
+const nav = { n: 0, max: 0 };
+let tabIds = (() => { try { const a = JSON.parse(localStorage.getItem('lw.tabs')); return Array.isArray(a) ? a.filter(id => library.some(d => d.id === id)) : []; } catch (e) { return []; } })();
+let blank = true;
+function pushNav(id) {
+  const cur = history.state && history.state.id !== undefined ? history.state.id : null;
+  if (cur === id) return;
+  nav.n++; nav.max = nav.n;
+  try { history.pushState({ id, n: nav.n }, '', location.pathname); } catch (e) { /* no */ }
+  updateNavBtns();
+}
+function updateNavBtns() { $('#btnBack').disabled = nav.n <= 0; $('#btnFwd').disabled = nav.n >= nav.max; }
+window.addEventListener('popstate', e => {
+  const s = e.state; if (!s) return;
+  nav.n = s.n || 0; nav.max = Math.max(nav.max, nav.n);
+  const d = s.id && library.find(x => x.id === s.id);
+  if (d) openDoc(d, { noPush: true }); else showBlank({ noPush: true });
+  updateNavBtns();
+});
+function showBlank(opt = {}) {
+  stop(); flushPos();
+  st.doc = null; st.sents = []; st.idx = 0; blank = true;
+  $('#reader').classList.add('hidden'); $('#player').classList.add('hidden'); $('#empty').classList.remove('hidden');
+  status(''); $('#inUrl').value = '';
+  if (!opt.keepView) switchView('leggi');
+  if (!opt.noPush) pushNav(null);
+  renderTabs();
+}
+function renderTabs() {
+  tabIds = tabIds.filter(id => library.some(d => d.id === id));
+  const el = $('#bTabs'), cur = st.doc ? st.doc.id : null;
+  el.innerHTML = tabIds.map(id => {
+    const d = library.find(x => x.id === id);
+    return `<div class="b-tab${id === cur ? ' on' : ''}" data-id="${id}" role="tab" title="${esc(d.title)}"><span>${L(d.lang).flag}</span><span class="b-title">${esc(d.title)}</span><button class="b-x" data-close="${id}" aria-label="Chiudi scheda">×</button></div>`;
+  }).join('') + (blank ? '<div class="b-tab on" role="tab"><span class="b-title">Nuova scheda</span></div>' : '');
+  save('lw.tabs', tabIds);
+  const on = el.querySelector('.on'); if (on) el.scrollLeft = Math.max(0, on.offsetLeft - 48);
+}
+function closeTab(id) {
+  const i = tabIds.indexOf(id); if (i < 0) return;
+  tabIds.splice(i, 1);
+  if (st.doc && st.doc.id === id) {
+    const nid = tabIds[i] || tabIds[i - 1], d = nid && library.find(x => x.id === nid);
+    if (d) openDoc(d); else showBlank();
+  } else renderTabs();
+}
+$('#bTabs').addEventListener('click', e => {
+  const x = e.target.closest('[data-close]'); if (x) { closeTab(x.dataset.close); return; }
+  const t = e.target.closest('.b-tab'); if (!t || !t.dataset.id) return;
+  if (st.doc && st.doc.id === t.dataset.id) { switchView('leggi'); return; }
+  const d = library.find(y => y.id === t.dataset.id); if (d) openDoc(d);
+});
+$('#btnBack').onclick = () => history.back();
+$('#btnFwd').onclick = () => history.forward();
+$('#btnReload').onclick = () => {
+  if (!st.doc) return;
+  if (st.doc.url) openUrl(st.doc.url, { force: true });
+  else toast('Questa pagina non ha un indirizzo da ricaricare');
+};
+$('#btnNewTab').onclick = () => { showBlank(); $('#inUrl').focus(); };
+document.addEventListener('keydown', e => {
+  if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); history.back(); }
+  if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); history.forward(); }
+});
+
 /* ---------------- libreria ---------------- */
 function addToLibrary(doc) {
   library = library.filter(d => d.url ? d.url !== doc.url : d.id !== doc.id);
@@ -547,7 +716,7 @@ function addToLibrary(doc) {
 function saveLibrary() {
   while (!save('lw.library', library) && library.length > 1) library.pop(); // spazio pieno: toglie le più vecchie
 }
-function persistDoc() { if (!st.doc) return; const d = library.find(x => x.id === st.doc.id); if (d) { d.lang = st.doc.lang; saveLibrary(); } }
+function persistDoc() { if (!st.doc) return; const d = library.find(x => x.id === st.doc.id); if (d) { d.lang = st.doc.lang; saveLibrary(); renderTabs(); } }
 let posTimer;
 function persistPos() {
   if (!st.doc) return;
@@ -567,7 +736,7 @@ function renderLibrary() {
     const pct = d.total ? Math.round(Math.min(d.pos, d.total) / d.total * 100) : 0;
     const when = new Date(d.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'short' });
     return `<li class="lib-item" data-id="${d.id}">
-      <span class="lib-flag">${d.lang === 'es' ? '🇪🇸' : '🇮🇹'}</span>
+      <span class="lib-flag">${L(d.lang).flag}</span>
       <div class="lib-main"><b>${esc(d.title)}</b><small>${esc(d.site || '')} · ${when}${pct ? ' · ' + pct + '%' : ''}</small>
       <div class="lib-bar"><i style="width:${pct}%"></i></div></div>
       <button class="lib-del" data-del="${d.id}" aria-label="Elimina"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
@@ -578,7 +747,10 @@ $('#libList').addEventListener('click', e => {
   const del = e.target.closest('[data-del]');
   if (del) {
     library = library.filter(d => d.id !== del.dataset.del);
-    saveLibrary(); renderLibrary(); return;
+    saveLibrary(); renderLibrary();
+    tabIds = tabIds.filter(i => i !== del.dataset.del);
+    if (st.doc && st.doc.id === del.dataset.del) showBlank({ keepView: true }); else renderTabs();
+    return;
   }
   const it = e.target.closest('.lib-item'); if (!it) return;
   const d = library.find(x => x.id === it.dataset.id); if (d) openDoc(d);
@@ -586,6 +758,7 @@ $('#libList').addEventListener('click', e => {
 $('#btnClearLib').onclick = () => {
   if (!confirm('Eliminare tutte le pagine salvate?')) return;
   library = []; saveLibrary(); renderLibrary();
+  tabIds = []; showBlank({ keepView: true });
 };
 
 /* ---------------- interfaccia ---------------- */
@@ -645,13 +818,14 @@ $('#selSleep').onchange = e => {
 };
 $('#selVoiceIt').onchange = e => { settings.voiceIt = e.target.value; saveSettings(); if (st.playing && st.doc.lang === 'it') play(st.idx); };
 $('#selVoiceEs').onchange = e => { settings.voiceEs = e.target.value; saveSettings(); if (st.playing && st.doc.lang === 'es') play(st.idx); };
+$('#selVoiceEn').onchange = e => { settings.voiceEn = e.target.value; saveSettings(); if (st.playing && st.doc.lang === 'en') play(st.idx); };
 $$('[data-test]').forEach(b => b.onclick = () => {
   if (!synth) return;
   const lang = b.dataset.test;
   if (st.playing) pause();
   synth.cancel();
-  const u = new SpeechSynthesisUtterance(lang === 'es' ? 'Hola, soy la voz que leerá tus páginas en español.' : 'Ciao, sono la voce che leggerà le tue pagine in italiano.');
-  u.lang = lang === 'es' ? 'es-ES' : 'it-IT';
+  const u = new SpeechSynthesisUtterance(L(lang).test);
+  u.lang = L(lang).bcp;
   const v = pickVoice(lang); if (v) { try { u.voice = v; u.lang = v.lang; } catch (e) { /* voce non valida */ } }
   u.rate = settings.rate; u.pitch = settings.pitch;
   synth.speak(u);
@@ -666,13 +840,15 @@ $('#verNum').textContent = (window.AppUpdate && window.AppUpdate.current) || '';
 settings.sleep = 0; // il timer parte solo quando lo scegli
 applySettingsUI();
 renderLibrary();
+try { history.replaceState({ id: null, n: 0 }, '', location.pathname + location.search); } catch (e) { /* no */ }
+renderTabs(); updateNavBtns();
 
 // condivisione da altre app (Android: Condividi → LeggiWeb) o ?url=
 (function fromShare() {
   const q = new URLSearchParams(location.search);
   const u = normUrl(q.get('url') || '') || normUrl(q.get('text') || '') || normUrl(q.get('title') || '');
   const txt = (q.get('text') || '').trim();
-  if (q.has('url') || q.has('text') || q.has('title')) history.replaceState(null, '', location.pathname);
+  if (q.has('url') || q.has('text') || q.has('title')) history.replaceState({ id: null, n: 0 }, '', location.pathname);
   if (u) { $('#inUrl').value = u; openUrl(u); }
   else if (txt.length > 40) { openText(txt); }
   else if (library[0] && library[0].pos > 0 && library[0].pos < (library[0].total || 1e9)) {
