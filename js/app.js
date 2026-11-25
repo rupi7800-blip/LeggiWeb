@@ -582,11 +582,14 @@ async function mtChunk(q, from, to, skip) {
   let last = new Error('nessun servizio');
   for (let i = 0; i < MT.length; i++) {
     if (skip.has(i)) continue;
-    try { return await MT[i](q, from, to); } catch (e) { last = e; skip.add(i); }
+    try { return await MT[i](q, from, to); } catch (e) {
+      last = e;
+      try { return await MT[i](q, from, to); } catch (e2) { last = e2; skip.add(i); } // un solo nuovo tentativo prima di passare oltre
+    }
   }
   throw last;
 }
-function chunkText(text, lang, max = 450) {
+function chunkText(text, lang, max = 400) {
   const out = []; let cur = '';
   for (const s of splitSentences(text, lang)) {
     if (cur && (cur + ' ' + s).length > max) { out.push(cur); cur = s; } else cur = cur ? cur + ' ' + s : s;
@@ -599,6 +602,10 @@ async function translateDoc(doc, to) {
   if (doc.lang === to) { toast('La pagina è già in ' + L(to).name); return; }
   const ready = library.find(d => d.srcId === doc.id && d.lang === to);
   if (ready) { openDoc(ready); toast('Traduzione già pronta'); return; }
+  if (!settings.trOk) {
+    if (!confirm('Per tradurre, il testo della pagina viene inviato a servizi online (MyMemory e, in alternativa, Google Translate). Non usare la traduzione per testi riservati. Continuare?')) return;
+    settings.trOk = true; saveSettings();
+  }
   const from = doc.lang;
   const queue = [], all = [];
   const mk = text => { const j = { text, out: '' }; queue.push(j); all.push(j); return j; };
@@ -702,6 +709,7 @@ $('#btnReload').onclick = () => {
 };
 $('#btnNewTab').onclick = () => { showBlank(); $('#srcSeg [data-src=url]').click(); $('#inUrl').focus(); };
 document.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return;
   if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); history.back(); }
   if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); history.forward(); }
 });
