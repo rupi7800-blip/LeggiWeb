@@ -30,3 +30,6 @@ non sono leggibili: in quel caso copia il testo e usa "Incolla testo".
 ## Voci mancanti
 - Android: Impostazioni → Sistema → Lingue → Output sintesi vocale → Motore Google → Installa dati vocali (Italiano, Español).
 - iPhone: Impostazioni → Accessibilità → Contenuto letto → Voci.
+
+## Traduttore e privacy
+Il traduttore (italiano, spagnolo, inglese) invia il testo della pagina a servizi online: **MyMemory** e, come riserva, l'endpoint non ufficiale di **Google Translate**. La prima volta l'app chiede conferma. Il limite gratuito di MyMemory è basso (circa 5000 caratteri al giorno) e l'endpoint di riserva può smettere di rispondere senza preavviso. Non tradurre testi riservati.
